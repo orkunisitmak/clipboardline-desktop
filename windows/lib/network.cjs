@@ -86,14 +86,101 @@ function decodeHTML(bytes, type = '') {
   if (label) return new TextDecoder(label).decode(bytes);
   try { return new TextDecoder('utf-8', {fatal: true}).decode(bytes); } catch { return new TextDecoder('windows-1252').decode(bytes); }
 }
+// The parsed window is a prefix of the document, so a multi-byte sequence its edge cuts is incomplete
+// rather than invalid. Left in place it fails the fatal UTF-8 check and drags the whole window into the
+// Windows-1252 fallback, so every accented character of the title arrives corrupted; dropping the dangling
+// bytes keeps the read UTF-8. The same trim the macOS parser applies in window(of:).
+const headWindow = bytes => {
+  const window = bytes.subarray(0, 32 * 1024);
+  if (bytes.length <= window.length) return window;
+  let end = window.length;
+  while (end > 0 && (window[end - 1] & 0xc0) === 0x80) end -= 1;
+  if (end > 0 && window[end - 1] >= 0xc0) end -= 1;
+  return window.subarray(0, end);
+}
 const collapse = value => value.replace(/\s+/g, ' ').trim();
-function meta(html, name) {
-  for (const match of html.matchAll(/<meta\b([^>]{0,4096})>/gi)) {
-    const attributes = {};
-    for (const attr of match[1].matchAll(/([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) attributes[attr[1].toLowerCase()] = attr[2] ?? attr[3];
-    if ([attributes.property, attributes.name].includes(name)) return entities(attributes.content || '').slice(0, 1000);
+// The same document as /<title[^>]{0,4096}>([\s\S]{0,2000}?)<\/title>/i, but read in a single pass: a pattern
+// with a bounded body re-walks that body for every opening tag, so markup that repeats <title without ever
+// closing it costs time by the square of the parsed window. Where a tag ends and where the next </title>
+// lies are each remembered once, so every search moves forward; the 4096 characters a tag may spend
+// reaching its '>' and the 2000 body characters stay the budgets the pattern carried.
+function titleBody(html) {
+  const opener = /<title/gi, closer = /<\/title>/gi;
+  let hit, closerAt = -1, angleAt = -1;
+  while ((hit = opener.exec(html))) {
+    const start = hit.index + 6;
+    if (angleAt < start) angleAt = html.indexOf('>', start);
+    if (angleAt < 0) break;
+    if (angleAt - start > 4096) continue;
+    const body = angleAt + 1;
+    if (closerAt < body) {
+      closer.lastIndex = body;
+      const found = closer.exec(html);
+      closerAt = found ? found.index : -1;
+      if (!found) break;
+    }
+    if (closerAt >= body && closerAt - body <= 2000) return html.slice(body, closerAt);
   }
   return '';
+}
+
+// The end of a tag is its first `>` that is not inside a quoted attribute value: markup may quote a `>`
+// inside a value (a description that quotes another tag), and cutting the tag there would hand the rest of
+// that value to the attribute parser as if it were attributes of the tag itself. Only a quote that starts a
+// value counts - one preceded by `=` - because an apostrophe inside an unquoted value (`name=it's`) is not a
+// value and treating it as one drags the tag end into the text after it, where the real `og:title` is. The
+// span searched for that quote is the tag's own, so a page of tags that quote nothing costs what it cost
+// before. A quote that is never closed is not a value: the plain `>` stands in that case, which is how such a
+// tag was read before, so a stray apostrophe cannot end the pass early.
+const quotes = /(?<==\s*)["']/;
+function tagEnd(html, from) {
+  let at = from;
+  for (;;) {
+    const angle = html.indexOf('>', at);
+    if (angle < 0) return -1;
+    // One character behind the span is read so a quote that opens the tag's first value still sees its `=`.
+    const back = at > 0 ? at - 1 : 0;
+    const quote = quotes.exec(html.slice(back, angle + 1));
+    if (!quote) return angle;
+    const open = back + quote.index;
+    if (open < at) return angle;
+    const close = html.indexOf(html[open], open + 1);
+    if (close < 0) return angle;
+    at = close + 1;
+  }
+}
+
+// The two metadata fields a preview needs, read in one forward pass: a pattern that re-matches every <meta
+// tag for each field costs the parsed window per field, and a tag that never reaches its '>' makes the
+// bounded attribute body retry across its whole budget. One pass answers both fields and the end of each tag
+// is remembered, so the same `>` is never looked for twice; 4096 characters to reach a `>` stays the budget
+// the pattern carried, and each field still keeps its own first match. Scanning resumes after the end of each
+// tag, so a `<meta` quoted inside another tag's attribute stays that attribute's text: read as a tag it would
+// let a page hand its own description a fake og:title.
+function metaFields(html) {
+  const found = {};
+  const opener = /<meta\b/gi;
+  let angleAt = -1, hit;
+  while ((hit = opener.exec(html))) {
+    const start = hit.index + 5;
+    if (angleAt < start) angleAt = tagEnd(html, start);
+    if (angleAt < 0) break;
+    // The scan resumes after the end of every tag that was located, budget or not: a tag too long to read
+    // still ends somewhere, and starting the next search inside its value would let a page hide a fake
+    // `og:title` in a description long enough to pass the budget.
+    opener.lastIndex = angleAt + 1;
+    if (angleAt - start > 4096) continue;
+    const attributes = {};
+    // An attribute name is anchored at its first character, so a run that finds no "=" gives up at once
+    // instead of retrying from every character inside it; without the anchor a page built out of long
+    // name-only attributes costs the square of its length.
+    for (const attr of html.slice(start, angleAt).matchAll(/(?<![\w:-])([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) attributes[attr[1].toLowerCase()] = attr[2] ?? attr[3];
+    for (const key of [attributes.property, attributes.name]) {
+      if ((key === 'og:title' || key === 'og:image') && found[key] === undefined) found[key] = entities(attributes.content || '').slice(0, 1000);
+    }
+    if (found['og:title'] !== undefined && found['og:image'] !== undefined) break;
+  }
+  return found;
 }
 async function linkMetadata(input, fetcher = metadataFetch) {
   metadataGuard(new URL(input));
@@ -107,10 +194,13 @@ async function linkMetadata(input, fetcher = metadataFetch) {
     return {title: String(data.title || '').trim().slice(0, 500)||url.hostname, author: String(data.author_name || '').slice(0, 200), thumbnail: typeof data.thumbnail_url==='string'?data.thumbnail_url:''};
   }
   const response = await fetcher(url.href); if (!/text\/html|application\/xhtml/i.test(response.type)) return {title: url.hostname};
-  const html = decodeHTML(response.bytes, response.type);
+  // Metadata sits in the head of a real page, so only this window is decoded and parsed: the work one
+  // preview may cost stops being a function of the download. Same 32 KiB head window as the macOS parser.
+  const html = decodeHTML(headWindow(response.bytes), response.type);
   // Collapse layout whitespace only in display text; og:image stays a URL.
-  const title = collapse(meta(html, 'og:title')) || collapse(entities((html.match(/<title[^>]*>([\s\S]{0,2000}?)<\/title>/i)?.[1] || '').replace(/<[^>]*>/g, ''))) || url.hostname;
-  let thumbnail = meta(html, 'og:image');
+  const fields = metaFields(html);
+  const title = collapse(fields['og:title'] || '') || collapse(entities(titleBody(html).replace(/<[^>]*>/g, ''))) || url.hostname;
+  let thumbnail = fields['og:image'] || '';
   if (thumbnail) try { thumbnail = new URL(thumbnail, response.url).href; } catch { thumbnail = ''; }
   return {title: title.slice(0, 500), thumbnail};
 }
