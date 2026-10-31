@@ -283,12 +283,13 @@ function topbar(){
  return `<header class="topbar library-toolbar">${iconButton('toggle-sidebar','sidebar','Toggle sidebar','aria-pressed="'+ui.sidebarVisible+'"')}<div class="window-title"><strong>${esc(libraryTitle())}</strong><small>${libraryItems().length} ${esc(t('items'))}</small></div><div class="toolbar library-main-tools">${iconButton('new-note','note','New note')}${iconButton('pin','pin','Pin')}${iconButton('view-mode',ui.list?'library':'list',ui.list?'Grid':'List')}${iconButton('toggle-filters','filter','Filters','aria-pressed="'+ui.filtersOpen+'"')}${iconButton('actions','actions','Actions')}</div><div class="grow"></div><label class="library-search">${icon('search')}<input id="search-input" data-focus="library-search" value="${attr(ui.search)}" placeholder="${attr(t('Search library…'))}" aria-label="${attr(t('Search Library'))}"></label>${iconButton('toggle-inspector','details','Show details','aria-pressed="'+ui.inspectorVisible+'"')}${windowControls()}</header>`;
 }
 function shelfPageSize(){const width=Number(window.innerWidth)||1600, cardWidth={small:120,medium:150,large:202}[state.settings.cardSize||'medium'];return Math.max(1,Math.min(9,Math.floor((width-48+24)/(cardWidth+24))));}
-function card(value,index,library=false,staticSelection=false) {
+function card(value,index,library=false,staticSelection=false,pagePos=null) {
  const image=thumbnail(value),name=title(value),dragHint=t(library?'Drag to add to a folder · Alt+drag to export file copies':value.kind==='image'?'Drag to export file copies':'Drag to insert text · Alt+drag to export file copies');
- const media=value.kind==='image'?`<img src="${attr(image)}" alt="${attr(name)}" loading="lazy" draggable="false">${recording(value)?`<span class="recording-badge" aria-label="${attr(t('Video'))}">${icon('play')}<span>${mediaTime(value.durationMs)}</span></span>`:''}`:value.kind==='text'?`<div class="card-body">${esc(value.text)}</div>`:`${image?`<img class="link-thumb" src="${attr(image)}" alt="" loading="lazy" draggable="false">`:`<div class="link-placeholder">${icon('link')}</div>`}<div class="card-title">${esc(name)}</div><div class="card-caption">${esc(hostname(value.url))}</div>`;
- const body=library&&ui.list?`<div class="list-title"><div class="list-thumbnail kind-${value.kind}">${value.kind==='text'?icon('text'):image?`<img src="${attr(image)}" alt="" loading="lazy" draggable="false">`:icon(value.kind)}</div><span class="card-title">${esc(name)}</span></div><span class="list-kind">${esc(t(TITLES[value.kind]))}</span><span class="list-tags">${esc((value.tags||[]).join(', '))}</span><time class="list-added" datetime="${attr(new Date(value.createdAt).toISOString())}">${esc(new Date(value.createdAt).toLocaleDateString())}</time>`:library?`<div class="library-media">${media}</div><div class="library-card-info"><div class="card-title">${esc(name)}</div><span class="card-caption">${icon(value.kind)}${esc(value.kind==='link'?hostname(value.url):t(TITLES[value.kind]))}</span>${value.tags?.length?`<span class="card-tags">${value.tags.slice(0,2).map(tag=>`<span class="tag">${esc(tag)}</span>`).join('')}</span>`:''}</div>`:`${value.kind==='text'&&value.name?`<div class="card-title">${esc(value.name)}</div>`:''}${media}${value.kind==='image'&&value.name?`<div class="card-caption">${esc(value.name)}</div>`:''}`;
- const width=Number(window.innerWidth)||1600,cw={small:120,medium:150,large:202}[state.settings.cardSize||'medium'],fraction=Math.max(0,Math.min(1,(24+cw/2+index*(cw+24))/width)),sag=4*Math.min(30,width*.018)*fraction*(1-fraction);
- return `<article class="card kind-${value.kind} ${!staticSelection&&ui.focus===value.id?'focused':''} ${!staticSelection&&ui.selected.has(value.id)?'selected':''} ${library?'library-card':''} ${recording(value)?'recording-card':''}" ${!library?`style="--sag:${sag.toFixed(2)}px"`:''} data-item-id="${attr(value.id)}" tabindex="${library?(ui.focus===value.id?0:-1):0}" role="option" aria-selected="${!staticSelection&&ui.selected.has(value.id)}" aria-label="${attr(name)}" aria-description="${attr(dragHint)}" title="${attr(dragHint)}" draggable="true">${body}<div class="card-controls">${library?iconButton('card-copy','copy','Copy',`data-id="${value.id}" tabindex="-1"`):''}<button data-action="card-pin" data-id="${value.id}" class="${value.pinned?'pinned':''}" ${library?'tabindex="-1"':''} aria-label="${attr(t(value.pinned?'Unpin':'Pin'))}" title="${attr(t(value.pinned?'Unpin':'Pin'))}">${icon('pin')}</button><button data-action="card-remove" data-id="${value.id}" ${library?'tabindex="-1"':''} aria-label="${attr(t('Take down'))}" title="${attr(t('Take down'))}">${icon('close')}</button></div>${!library&&index<9?`<span class="card-number" aria-hidden="true">${index+1}</span>`:''}</article>`;
+ const media=value.kind==='image'?`<img src="${attr(image)}" alt="${attr(name)}" loading="lazy">${recording(value)?`<span class="recording-badge" aria-label="${attr(t('Video'))}">${icon('play')}<span>${mediaTime(value.durationMs)}</span></span>`:''}`:value.kind==='text'?`<div class="card-body">${esc(value.text)}</div>`:`${image?`<img class="link-thumb" src="${attr(image)}" alt="" loading="lazy">`:`<div class="link-placeholder">${icon('link')}</div>`}<div class="card-title">${esc(name)}</div><div class="card-caption">${esc(hostname(value.url))}</div>`;
+ const body=library&&ui.list?`<div class="list-title"><div class="list-thumbnail kind-${value.kind}">${value.kind==='text'?icon('text'):image?`<img src="${attr(image)}" alt="" loading="lazy">`:icon(value.kind)}</div><span class="card-title">${esc(name)}</span></div><span class="list-kind">${esc(t(TITLES[value.kind]))}</span><span class="list-tags">${esc((value.tags||[]).join(', '))}</span><time class="list-added" datetime="${attr(new Date(value.createdAt).toISOString())}">${esc(new Date(value.createdAt).toLocaleDateString())}</time>`:library?`<div class="library-media">${media}</div><div class="library-card-info"><div class="card-title">${esc(name)}</div><span class="card-caption">${icon(value.kind)}${esc(value.kind==='link'?hostname(value.url):t(TITLES[value.kind]))}</span>${value.tags?.length?`<span class="card-tags">${value.tags.slice(0,2).map(tag=>`<span class="tag">${esc(tag)}</span>`).join('')}</span>`:''}</div>`:`${value.kind==='text'&&value.name?`<div class="card-title">${esc(value.name)}</div>`:''}${media}${value.kind==='image'&&value.name?`<div class="card-caption">${esc(value.name)}</div>`:''}`;
+ const pos=pagePos!==null&&pagePos!==undefined?pagePos:index;
+ const width=Number(window.innerWidth)||1600,cw={small:120,medium:150,large:202}[state.settings.cardSize||'medium'],fraction=Math.max(0,Math.min(1,(24+cw/2+pos*(cw+24))/width)),sag=4*Math.min(30,width*.018)*fraction*(1-fraction);
+ return `<article class="card kind-${value.kind} ${!staticSelection&&ui.focus===value.id?'focused':''} ${!staticSelection&&ui.selected.has(value.id)?'selected':''} ${library?'library-card':''} ${recording(value)?'recording-card':''}" ${!library?`style="--sag:${sag.toFixed(2)}px"`:''} data-item-id="${attr(value.id)}" tabindex="${library?(ui.focus===value.id?0:-1):0}" role="option" aria-selected="${!staticSelection&&ui.selected.has(value.id)}" aria-label="${attr(name)}" aria-description="${attr(dragHint)}" title="${attr(dragHint)}" draggable="true">${body}<div class="card-controls">${library?iconButton('card-copy','copy','Copy',`data-id="${value.id}" tabindex="-1"`):''}<button data-action="card-pin" data-id="${value.id}" class="${value.pinned?'pinned':''}" ${library?'tabindex="-1"':''} aria-label="${attr(t(value.pinned?'Unpin':'Pin'))}" title="${attr(t(value.pinned?'Unpin':'Pin'))}">${icon('pin')}</button><button data-action="card-remove" data-id="${value.id}" ${library?'tabindex="-1"':''} aria-label="${attr(t('Take down'))}" title="${attr(t('Take down'))}">${icon('close')}</button></div>${!library&&pos<9?`<span class="card-number" aria-hidden="true">${pos+1}</span>`:''}</article>`;
 }
 function hostname(url) { try{return new URL(url).hostname.replace(/^www\./,'');}catch{return '';}}
 function empty() { return `<div class="empty"><strong>${esc(t(ui.search?'No matching items':'No items yet'))}</strong><span>${esc(t(ui.search?'Try another search or filter.':'Copy something or import a file to get started.'))}</span></div>`; }
@@ -296,8 +297,13 @@ function searchHUD(){if(!ui.searchOpen)return '';const count=visibleKinds().redu
  return `<section class="search-hud" role="search" aria-label="${attr(t('Search shelves'))}"><header><span class="scope-chips">${visibleKinds().map(kind=>`<span class="scope-chip kind-${kind}">${icon(kind)}${esc(t(TITLES[kind]))}</span>`).join('')}</span><span class="grow"></span>${iconButton('actions','actions','Actions')}${iconButton('close-search','close','Close')}</header><label class="search-field">${icon('search')}<input id="search-input" data-focus="shelf-search" placeholder="${attr(t('Search visible shelves…'))}" value="${attr(ui.search)}" aria-label="${attr(t('Search shelves'))}" autocomplete="off"></label><footer><span>${count} ${esc(t('items'))} · ${esc(t('Visible shelves'))}</span><span class="grow"></span><kbd>↑ ↓</kbd> ${esc(t('Browse results'))}<kbd>Esc</kbd> ${esc(t('Close'))}</footer></section>`;
 }
 function shelfRow(kind,size,staticSelection=false){
- const values=rowItems(kind),max=Math.max(0,Math.ceil(values.length/size)-1);ui.pages[kind]=Math.min(ui.pages[kind],max);const page=ui.pages[kind]||0;
- return `<section class="shelf ${!staticSelection&&ui.active===kind?'active-shelf':''}" data-shelf="${kind}" data-page-size="${size}" aria-label="${attr(t(TITLES[kind]))}"><div class="shelf-head"><button class="shelf-title quiet kind-${kind}" data-action="activate-shelf" data-kind="${kind}">${icon(kind)}${esc(t(TITLES[kind]))}<span class="shelf-count">${values.length}</span></button><div class="grow"></div><div class="shelf-tools">${iconButton('actions','actions','Actions')}${iconButton('search','search','Search shelves')}<button class="icon-button quiet" data-action="pinned-kind" data-kind="${kind}" aria-pressed="${ui.pinned[kind]}" title="${attr(t('Show pinned items'))}">${icon('pin')}</button>${iconButton('page-back','left','Previous page',`data-kind="${kind}" ${!page?'disabled':''}`)}<span class="selection-info">${values.length?page+1:0} / ${Math.max(1,max+1)}</span>${iconButton('page-next','right','Next page',`data-kind="${kind}" ${page>=max?'disabled':''}`)}${iconButton('toggle-selection','select','Select items','aria-pressed="'+ui.selecting+'"')}${iconButton('library','library','Library')}${iconButton('settings','settings','Settings')}${state.update?.canInstall?`<button class="update-badge" data-action="check-updates" title="Update available">●</button>`:''}${iconButton('hide','close','Hide')}</div></div><svg class="line rope" viewBox="0 0 1000 95" preserveAspectRatio="none" aria-hidden="true"><path d="M 0 32 Q 500 ${32+Math.min(30,(Number(window.innerWidth)||1600)*.018)*2} 1000 32"/></svg><div class="cards" role="listbox" aria-label="${attr(t(TITLES[kind]))}" aria-multiselectable="true">${values.length?values.slice(page*size,page*size+size).map((value,index)=>card(value,index,false,staticSelection)).join(''):empty()}</div></section>`;
+ const values=rowItems(kind),pageCount=Math.max(1,Math.ceil(values.length/size)),max=pageCount-1;
+ ui.pages[kind]=Math.min(ui.pages[kind]||0,max);const currentPage=ui.pages[kind]||0;
+ const width=Number(window.innerWidth)||1600,ropeSag=32+Math.min(30,width*.018)*2;
+ let pagesHtml='';
+ if(!values.length){pagesHtml=`<div class="shelf-page">${empty()}</div>`;}
+ else{for(let p=0;p<pageCount;p++){const slice=values.slice(p*size,p*size+size);pagesHtml+=`<div class="shelf-page" data-page="${p}">${slice.map((value,pos)=>card(value,p*size+pos,false,staticSelection,pos)).join('')}</div>`;}}
+ return `<section class="shelf ${!staticSelection&&ui.active===kind?'active-shelf':''}" data-shelf="${kind}" data-page-size="${size}" aria-label="${attr(t(TITLES[kind]))}"><div class="shelf-head"><button class="shelf-title quiet kind-${kind}" data-action="activate-shelf" data-kind="${kind}">${icon(kind)}${esc(t(TITLES[kind]))}<span class="shelf-count">${values.length}</span></button><div class="grow"></div><div class="shelf-tools">${iconButton('actions','actions','Actions')}${iconButton('search','search','Search shelves')}<button class="icon-button quiet" data-action="pinned-kind" data-kind="${kind}" aria-pressed="${ui.pinned[kind]}" title="${attr(t('Show pinned items'))}">${icon('pin')}</button>${iconButton('page-back','left','Previous page',`data-kind="${kind}" ${!currentPage?'disabled':''}`)}<span class="selection-info">${values.length?currentPage+1:0} / ${pageCount}</span>${iconButton('page-next','right','Next page',`data-kind="${kind}" ${currentPage>=max?'disabled':''}`)}${iconButton('toggle-selection','select','Select items','aria-pressed="'+ui.selecting+'"')}${iconButton('library','library','Library')}${iconButton('settings','settings','Settings')}${state.update?.canInstall?`<button class="update-badge" data-action="check-updates" title="Update available">●</button>`:''}${iconButton('hide','close','Hide')}</div></div><svg class="line rope" viewBox="0 0 1000 95" preserveAspectRatio="none" aria-hidden="true"><path d="M 0 32 Q 500 ${ropeSag.toFixed(1)} 1000 32"/></svg><div class="cards" role="listbox" aria-label="${attr(t(TITLES[kind]))}" aria-multiselectable="true">${pagesHtml}</div></section>`;
 }
 function shelves(staticSelection=false){const size=shelfPageSize();return `${searchHUD()}<main class="content shelves" style="--rows:${visibleKinds().length}" aria-label="Clipboard shelves">${visibleKinds().map(kind=>shelfRow(kind,size,staticSelection)).join('')}</main>`;}
 function sidebar(){const scopes=[['saved','My library','library'],['pinned','Pinned','pin'],['unorganized','Unorganized','folder'],['recent','Recent copies','history'],['trash','Trash','trash']],tags=[...new Set(state.items.filter(value=>!value.trashedAt).flatMap(value=>value.tags||[]))].sort();return `<aside class="sidebar" style="width:${ui.sidebarWidth}px;flex-basis:${ui.sidebarWidth}px" aria-label="${attr(t('Library navigation'))}"><div class="sidebar-heading">ClipBoardLine</div>${scopes.map(([scope,label,symbol])=>`<button data-action="scope" data-scope="${scope}" class="${ui.scope===scope?'active':'quiet'}">${icon(symbol)}${esc(t(label))}</button>`).join('')}<h2>${esc(t('Folders'))}</h2>${orderedFolders().map(folder=>{let depth=0,parent=folder.parentId;const visited=new Set([folder.id]);while(parent&&!visited.has(parent)){visited.add(parent);depth++;parent=state.folders.find(value=>value.id===parent)?.parentId;}return `<div class="folder-row"><button data-action="folder-scope" data-folder="${folder.id}" class="${ui.scope==='folder'&&ui.folder===folder.id?'active':'quiet'}" style="padding-left:${11+depth*14}px" title="${attr(folderPath(folder.id))}">${icon('folder')}${esc(folder.name)}</button><button class="quiet" data-action="folder-menu" data-folder="${folder.id}" aria-label="Folder actions">⋯</button></div>`;}).join('')}${button('new-folder','New folder','class="quiet"')}<h2>${esc(t('Tags'))}</h2>${tags.map(tag=>`<div class="tag-row"><button data-action="tag-scope" data-tag="${attr(tag)}" class="${ui.scope==='tag'&&ui.tag===tag?'active':'quiet'}"><span class="tag-dot"></span>${esc(tag)}</button><button class="quiet" data-action="tag-menu" data-tag="${attr(tag)}" aria-label="${attr(t('Tag actions'))}">⋯</button></div>`).join('')}</aside>`;}
@@ -346,7 +352,7 @@ function scrollContexts(){
   const selected=selectedIds().slice().sort(),details=key(['details',selected]);contexts.set('.inspector',details);contexts.set('#detail-text',details);contexts.set('#detail-note',details);
  }else if(ui.view==='settings'){
   contexts.set('.settings-main',key(['settings',ui.settingsTab,ui.settingsTab==='shortcuts'?ui.shortcutsQuery:'']));contexts.set('.settings-tabs',key(['settings-navigation']));
- }else if(ui.view==='shelves')for(const kind of visibleKinds())contexts.set(`.shelf[data-shelf="${kind}"] .cards`,key(['shelf',kind,ui.pages[kind],ui.search,ui.pinned[kind],visibleKinds()]));
+ }else if(ui.view==='shelves')for(const kind of visibleKinds())contexts.set(`.shelf[data-shelf="${kind}"] .cards`,key(['shelf',kind,ui.search,ui.pinned[kind],visibleKinds()]));
  return contexts;
 }
 function captureScrollPositions(){const positions=[];for(const [selector,key]of renderedScrollContexts){const node=root.querySelector(selector);if(node)positions.push({selector,key,top:node.scrollTop||0,left:node.scrollLeft||0});}return positions;}
@@ -380,7 +386,7 @@ function renderShelfTree(html){
  // Managed image URLs remain stable after edits. Include the visible image's
  // edit state so crop/markup or regenerated link thumbnails cannot reuse pixels
  // from the previous revision even when their displayed title did not change.
- const media=new Map(kinds.map(kind=>[kind,rowItems(kind).slice((ui.pages[kind]||0)*size,((ui.pages[kind]||0)+1)*size).filter(value=>value.kind!=='text').map(shelfMediaSignature)]));
+ const media=new Map(kinds.map(kind=>[kind,rowItems(kind).filter(value=>value.kind!=='text').map(shelfMediaSignature)]));
  const sameMarkup=lastShelfMarkup===html;lastShelfMarkup=html;
  if(shelfRoot&&sameMarkup&&kinds.every(kind=>sameShelfMedia(previousRows.get(kind)?.media,media.get(kind))))return true;
  // Generate content keys with the same renderer, excluding only selection.
@@ -844,7 +850,12 @@ async function clickAction(target){const action=target.dataset.action;
  if(action==='card-pin'){await command('pin',{ids:[target.dataset.id]});return;}if(action==='card-remove'){await takeDown([target.dataset.id]);return;}
  if(action==='activate-shelf'){ui.active=target.dataset.kind;select(rowItems(ui.active)[0]);render();return;}
  if(action==='pinned-kind'){const kind=target.dataset.kind;ui.active=kind;ui.pinned[kind]=!ui.pinned[kind];select(rowItems(kind)[0]);render();return;}
- if(action==='page-back'||action==='page-next'){ui.active=target.dataset.kind;ui.pages[ui.active]=Math.max(0,(ui.pages[ui.active]||0)+(action==='page-next'?1:-1));select(rowItems(ui.active)[ui.pages[ui.active]*shelfPageSize()]);render();return;}
+ if(action==='page-back'||action==='page-next'){
+  const kind=target.dataset.kind||ui.active;ui.active=kind;
+  const shelf=root.querySelector(`.shelf[data-shelf="${kind}"]`),cards=shelf?.querySelector('.cards');
+  if(cards){cards.scrollBy({left:action==='page-next'?cards.clientWidth:-cards.clientWidth,behavior:'smooth'});}
+  return;
+ }
  if(action==='close-search'){ui.search='';ui.searchOpen=false;focusFirst();render();return;}
  if(action==='scope'){ui.scope=target.dataset.scope;ui.search='';focusFirst();render();return;}
  if(action==='folder-scope'){ui.scope='folder';ui.folder=target.dataset.folder;ui.search='';focusFirst();render();return;}
@@ -883,6 +894,7 @@ async function clickAction(target){const action=target.dataset.action;
  await perform(action);
 }
 document.addEventListener('click',async event=>{if(inspectorDrafts.size&&!await flushInspectorDrafts())return;if(event.target.classList?.contains('modal-backdrop')&&!ui.modal){void closePreview();return;}const target=event.target.closest('[data-action]');if(target){event.stopPropagation();void clickAction(target);return;}const card=event.target.closest('[data-item-id]');if(card){const value=item(card.dataset.itemId);const selectionOnly=event.shiftKey||event.ctrlKey||event.metaKey||ui.selecting;select(value,event.shiftKey,event.ctrlKey||event.metaKey||ui.selecting);render();if(ui.view==='shelves'&&!selectionOnly)void copySelection(true);return;}if(ui.view==='shelves'&&!event.target.closest('.search-hud,.search-summary,.shelf-head,.card,.dialog')&&!ui.preview&&!ui.modal){void perform('hide');}});
+document.addEventListener('contextmenu',event=>{const card=event.target.closest('[data-item-id]');if(!card||event.target.closest('button,input,select,textarea'))return;event.preventDefault();event.stopPropagation();const value=item(card.dataset.itemId);if(!value||value.trashedAt)return;if(!ui.selected.has(value.id))select(value);render();openModal({type:'actions',query:'',index:0,contextIds:[value.id],contextFocus:value.id,contextSurface:shortcutContext()});});
 document.addEventListener('dblclick',event=>{const card=event.target.closest('[data-item-id]');if(card&&!event.target.closest('button')){void openPreview(card.dataset.itemId);return;}if(event.target.id==='markup-canvas'&&ui.editor?.tool==='select'&&ui.editor.selected!=null){const annotation=ui.editor.annotations[ui.editor.selected];if(annotation?.type==='text')openModal({type:'annotation',title:'Text annotation',label:'Text',value:annotation.text,multiline:true,x:annotation.x,y:annotation.y,annotationIndex:ui.editor.selected});}else if(event.target.closest('.image-stage')&&!ui.editor){ui.zoom=1;ui.pan={x:0,y:0};updateTransform();}});
 document.addEventListener('input',async event=>{const target=event.target;if(target.dataset.videoTrim){updateVideoTrim(target);return;}if(['detail-name','detail-text','detail-note'].includes(target.id)){queueInspectorDraft({'detail-name':'name','detail-text':'text','detail-note':'note'}[target.id],target.value);return;}if(target.id==='search-input'){if(!await flushInspectorDrafts())return;}if(target.id==='search-input'){const start=target.selectionStart;ui.search=target.value;ui.selected.clear();ui.focus=null;render();const next=document.getElementById('search-input');next?.focus();next?.setSelectionRange(start,start);}
 else if(target.id==='modal-query'){const start=target.selectionStart;ui.modal.query=target.value;ui.modal.index=0;renderOverlay();const field=document.getElementById('modal-query');field?.focus();field?.setSelectionRange(start,start);}
@@ -909,7 +921,46 @@ document.addEventListener('pointerdown',event=>{const grip=event.target.closest(
 document.addEventListener('pointermove',event=>{if(pointer){event.preventDefault();editorPointerMove(event);}});
 document.addEventListener('pointerup',()=>{if(pointer?.type==='list-resize')void setLibraryLayout({listColumns:{...ui.listColumns}});if(pointer?.type==='library-resize'){const column=pointer.column;void setLibraryLayout({[column+'Width']:ui[column+'Width']});}finishPointerGesture();document.querySelector('.image-stage')?.classList.remove('panning');});
 document.addEventListener('pointercancel',()=>{if(pointer?.type==='list-resize'){resizeListColumn(pointer.column,pointer.width);render();}finishPointerGesture();});
-document.addEventListener('wheel',event=>{if(!ui.preview||item(ui.preview)?.kind!=='image'||recording(item(ui.preview))||!event.target.closest('.image-stage'))return;event.preventDefault();if(event.shiftKey){ui.pan.x-=event.deltaY;ui.pan.y-=event.deltaX;}else{ui.zoom=Math.min(4,Math.max(1,ui.zoom*(event.deltaY<0?1.13:1/1.13)));if(ui.zoom===1)ui.pan={x:0,y:0};}updateTransform();},{passive:false});
+let lastShelfWheelTime=0;
+document.addEventListener('wheel',event=>{
+ if(ui.preview&&item(ui.preview)?.kind==='image'&&!recording(item(ui.preview))&&event.target.closest('.image-stage')){
+  event.preventDefault();
+  if(event.shiftKey){ui.pan.x-=event.deltaY;ui.pan.y-=event.deltaX;}
+  else{ui.zoom=Math.min(4,Math.max(1,ui.zoom*(event.deltaY<0?1.13:1/1.13)));if(ui.zoom===1)ui.pan={x:0,y:0};}
+  updateTransform();
+  return;
+ }
+ const shelf=event.target.closest('.shelf');
+ if(shelf&&ui.view==='shelves'){
+  const cards=shelf.querySelector('.cards');
+  if(cards){
+   event.preventDefault();
+   const delta=Math.abs(event.deltaY)>=Math.abs(event.deltaX)?event.deltaY:event.deltaX;
+   if(!delta)return;
+   const now=Date.now();
+   if(now-lastShelfWheelTime>220){
+    lastShelfWheelTime=now;
+    cards.scrollBy({left:delta>0?cards.clientWidth:-cards.clientWidth,behavior:'smooth'});
+   }
+  }
+ }
+},{passive:false});
+document.addEventListener('scroll',event=>{
+ const cards=event.target;
+ if(!cards?.classList?.contains('cards'))return;
+ const shelf=cards.closest('.shelf');if(!shelf)return;
+ const kind=shelf.dataset.shelf;if(!kind)return;
+ const size=shelfPageSize(),values=rowItems(kind);
+ const max=Math.max(0,Math.ceil(values.length/size)-1);
+ const page=Math.min(max,Math.max(0,Math.round(cards.scrollLeft/(cards.clientWidth||1))));
+ ui.pages[kind]=page;
+ const info=shelf.querySelector('.selection-info');
+ if(info)info.textContent=`${values.length?page+1:0} / ${Math.max(1,max+1)}`;
+ const prevBtn=shelf.querySelector('[data-action="page-back"]');
+ const nextBtn=shelf.querySelector('[data-action="page-next"]');
+ if(prevBtn)prevBtn.disabled=(cards.scrollLeft<=5);
+ if(nextBtn)nextBtn.disabled=(cards.scrollLeft+cards.clientWidth>=cards.scrollWidth-5);
+},{passive:true,capture:true});
 const libraryDragType='application/x-clipboardline-ids';let libraryDragIDs=null,folderDropTarget=null,libraryRenderDeferred=false;
 function clearFolderDropTarget(){folderDropTarget?.classList.remove('folder-drop-target');folderDropTarget=null;}
 function clearLibraryDrag({flush=true}={}){const deferred=libraryRenderDeferred;libraryDragIDs=null;libraryRenderDeferred=false;clearFolderDropTarget();if(flush&&deferred)render();return deferred;}
@@ -931,9 +982,28 @@ document.addEventListener('dragstart',event=>{
  if(!ui.selected.has(value.id))select(value);
  const values=selectedIds().map(item).filter(value=>value&&!value.trashedAt),ids=values.map(value=>value.id);
  if(!ids.length){event.preventDefault();if(deferred)render();return;}
- const text=values.filter(value=>value.kind!=='image').map(value=>value.kind==='link'?value.url:value.text).join('\n\n');event.dataTransfer.effectAllowed='copy';if(text)event.dataTransfer.setData('text/plain',text);event.dataTransfer.setData(libraryDragType,JSON.stringify(ids));
- if(ui.view==='library'&&!event.altKey){libraryDragIDs=ids;libraryRenderDeferred=deferred;}
- else if(event.altKey||values.some(value=>value.kind==='image')){event.preventDefault();if(deferred)render();void command('startDrag',{ids}).then(result=>{if(!result)toast(t('Use Copy or Export to transfer these items.'));});}
+ const text=values.filter(value=>value.kind!=='image').map(value=>value.kind==='link'?value.url:value.text).join('\n\n');
+ event.dataTransfer.effectAllowed='copy';
+ if(text)event.dataTransfer.setData('text/plain',text);
+ event.dataTransfer.setData(libraryDragType,JSON.stringify(ids));
+ const hasImage=values.some(value=>value.kind==='image');
+ if(ui.view==='library'&&!event.altKey){
+  libraryDragIDs=ids;libraryRenderDeferred=deferred;
+ }else if(hasImage||event.altKey){
+  event.preventDefault();
+  if(deferred)render();
+  if(ui.view==='shelves')document.body.classList.add('dragging-out');
+  void command('startDrag',{ids}).then(result=>{if(!result)toast(t('Use Copy or Export to transfer these items.'));}).finally(()=>{document.body.classList.remove('dragging-out');});
+ }else{
+  const links=values.filter(value=>value.kind==='link').map(value=>value.url);
+  if(links.length)try{event.dataTransfer.setData('text/uri-list',links.join('\r\n'));}catch{}
+  if(ui.view==='shelves'){
+   requestAnimationFrame(()=>{
+    document.body.classList.add('dragging-out');
+    void command('dragStartOverlay');
+   });
+  }
+ }
 });
 document.addEventListener('dragover',event=>{const folder=libraryDropFolder(event);if(!folder){clearFolderDropTarget();return;}event.preventDefault();event.dataTransfer.dropEffect='copy';if(folderDropTarget!==folder.row){clearFolderDropTarget();folderDropTarget=folder.row;folderDropTarget.classList.add('folder-drop-target');}});
 document.addEventListener('dragleave',event=>{if(folderDropTarget&&!folderDropTarget.contains(event.relatedTarget))clearFolderDropTarget();});
@@ -947,7 +1017,11 @@ document.addEventListener('drop',async event=>{
   await command('folder',{ids,folderId:folder.id,pinning:false});
  }finally{if(deferred)render();}
 });
-document.addEventListener('dragend',clearLibraryDrag);
+document.addEventListener('dragend',()=>{
+ document.body.classList.remove('dragging-out');
+ clearLibraryDrag();
+ if(ui.view==='shelves')void command('dragEndOverlay');
+});
 window.addEventListener('blur',clearLibraryDrag);
 window.addEventListener('resize',()=>{if(ui.view==='shelves'&&!dirtyPreview()){const current=item(ui.focus);if(current)select(current);render();}});
 window.addEventListener('blur',()=>{if(ui.modal?.type==='record')closeModal();ui.spacePan=false;finishPointerGesture();});
